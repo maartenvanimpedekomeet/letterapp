@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Letterles</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Edu+SA+Beginner:wght@400;700&family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Header -->
+<header class="app-header">
+  <button class="terug" onclick="history.back()" title="Terug">←</button>
+  <div class="letter-badge" id="header-badge">i</div>
+  <div style="flex:1">
+    <div style="font-weight:900;font-size:1.1rem" id="header-letter">Letter i</div>
+    <div class="letter-naam" id="header-kern">Kern Start</div>
+  </div>
+  <button id="tts-settings-btn" class="tts-settings-btn" title="Uitspraak instellingen">⚙️ Stem aanpassen</button>
+</header>
+
+<!-- TTS instellingen panel -->
+<div id="tts-panel" class="tts-panel" style="display:none">
+  <label class="tts-label">🗣️ Stem:
+    <select id="tts-stem-select"><option value="">Automatisch</option></select>
+  </label>
+  <label class="tts-label" style="flex:1;min-width:12rem">⏱️ Snelheid:
+    <input type="range" id="tts-snelheid" min="0.5" max="1.5" step="0.05">
+    <span id="tts-snelheid-label"></span>
+  </label>
+  <button id="tts-test-btn" class="btn btn-grijs" style="font-size:.8rem;padding:.35rem .7rem">▶ Test</button>
+</div>
+
+<!-- Fase-tabs -->
+<nav class="fase-tabs" id="fase-tabs">
+  <button class="fase-tab actief" data-fase="motivatie">🎬 Motivatie</button>
+  <button class="fase-tab" data-fase="visueel">👁️ Visueel</button>
+  <button class="fase-tab" data-fase="auditief">🔊 Auditief</button>
+  <button class="fase-tab" data-fase="koppeling">🔗 Koppeling</button>
+  <button class="fase-tab" data-fase="schrijf">✏️ Schrijfmotoriek</button>
+</nav>
+
+<!-- Activiteit-tabs per fase -->
+<div id="activ-tabs-container"></div>
+
+<!-- Hoofd-inhoud -->
+<main class="inhoud" id="fase-inhoud"></main>
+
+<script src="data.js"></script>
+<script>
+// ============================================================
+// INIT
+// ============================================================
+const params = new URLSearchParams(location.search);
+const KLANK  = params.get('letter') || 'i';
+const IDX    = getLetterIndex(KLANK);
+const KERN   = getKern(KLANK);
+const WORDS  = WOORDEN[KLANK] || [];
+const KERN_NAMEN = { start:'Kern Start',kern1:'Kern 1',kern2:'Kern 2',kern3:'Kern 3',kern4:'Kern 4',kern5:'Kern 5',kern6:'Kern 6' };
+const FASE_KLEUREN = { motivatie:'#7C3AED',visueel:'#2563EB',auditief:'#EA580C',koppeling:'#16A34A',schrijf:'#DB2777' };
+
+let huidige_fase = 'motivatie';
+let huidige_activ = 0;
+
+// Sla extra woorden op (persistent via localStorage)
+function getExtraWords() {
+  try { return JSON.parse(localStorage.getItem('extra_' + KLANK) || '[]'); } catch { return []; }
+}
+function saveExtraWords(arr) {
+  localStorage.setItem('extra_' + KLANK, JSON.stringify(arr));
+}
+function getAllWords() {
+  return [...WORDS, ...getExtraWords()];
+}
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// Bouwt een geshuffle lijst van min 25 woorden voor "Hoor je de letter?"
+// 66% met de doelklank, 34% zonder.
+function getAllWordsAuditief() {
+  const basisMet    = WORDS.filter(w => w.heeftLetter);
+  const basisZonder = WORDS.filter(w => !w.heeftLetter);
+
+  // Extra woorden MET de letter uit AUDITIEF_EXTRA_MET
+  const extraMetRaw = (AUDITIEF_EXTRA_MET[KLANK] || []).map(w => ({
+    woord: w.woord, emoji: w.emoji, heeftLetter: true, delen: [w.woord]
+  }));
+  const basisMetWoorden = new Set(basisMet.map(w => w.woord));
+  const extraMet = extraMetRaw.filter(w => !basisMetWoorden.has(w.woord));
+
+  // Extra distractors ZONDER de letter: scan alle WOORDEN
+  const gezienWoorden = new Set(WORDS.map(w => w.woord));
+  const extraZonder = [];
+  for (const wds of Object.values(WOORDEN)) {
+    for (const w of wds) {
+      if (!w.woord.includes(KLANK) && !gezienWoorden.has(w.woord)) {
+        gezienWoorden.add(w.woord);
+        extraZonder.push({ ...w, heeftLetter: false });
+      }
+    }
+  }
+
+  const metLetter    = shuffle([...basisMet, ...extraMet]);
+  const zonderLetter = shuffle([...basisZonder, ...extraZonder]);
+
+  const aantalMet    = Math.max(17, metLetter.length);
+  const aantalZonder = Math.max(8,  Math.ceil(aantalMet * 0.5));
+  const metGekozen    = metLetter.slice(0, Math.min(aantalMet, metLetter.length));
+  const zonderGekozen = zonderLetter.slice(0, Math.min(aantalZonder, zonderLetter.length));
+
+  return shuffle([...metGekozen, ...zonderGekozen]);
+}
+
+let geluidAan = false;
+let ttsRate = parseFloat(localStorage.getItem('tts_rate') || '0.85');
+let ttsVoiceNaam = localStorage.getItem('tts_voice') || '';
+
+// ============================================================
+// TTS PANEL
+// ============================================================
+function initTTSPanel() {
+  const btn = document.getElementById('tts-settings-btn');
+  const panel = document.getElementById('tts-panel');
+  const stemSelect = document.getElementById('tts-stem-select');
+  const snelheidSlider = document.getElementById('tts-snelheid');
+  const snelheidLabel = document.getElementById('tts-snelheid-label');
+  const testBtn = document.getElementById('tts-test-btn');
+
+  btn.addEventListener('click', () => {
+    panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
+  });
+
+  function vulStemmen() {
+    const stemmen = window.speechSynthesis.getVoices().filter(s =>
+      s.lang === 'nl-NL' || s.lang === 'nl-BE' || s.lang.startsWith('nl')
+    );
+    stemSelect.innerHTML = '<option value="">Automatisch</option>';
+    stemmen.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.name;
+      opt.textContent = s.name;
+      opt.selected = s.name === ttsVoiceNaam;
+      stemSelect.appendChild(opt);
+    });
+  }
+
+  if (window.speechSynthesis.getVoices().length) {
+    vulStemmen();
+  } else {
+    window.speechSynthesis.onvoiceschanged = vulStemmen;
+  }
+
+  snelheidSlider.value = ttsRate;
+  snelheidLabel.textContent = ttsRate.toFixed(2) + 'x';
+
+  stemSelect.addEventListener('change', () => {
+    ttsVoiceNaam = stemSelect.value;
+    localStorage.setItem('tts_voice', ttsVoiceNaam);
+  });
+
+  snelheidSlider.addEventListener('input', () => {
+    ttsRate = parseFloat(snelheidSlider.value);
+    snelheidLabel.textContent = ttsRate.toFixed(2) + 'x';
+    localStorage.setItem('tts_rate', ttsRate);
+  });
+
+  testBtn.addEventListener('click', () => spreekUit('Dit is een test van de uitspraak'));
+}
+
+// Combineert basiswoorden + AUDITIEF_EXTRA_MET voor min. 17 woorden met de letter
+function getAllWordsMetLetter() {
+  const basis = WORDS.filter(w => w.heeftLetter);
+  const basisWoorden = new Set(basis.map(w => w.woord));
+  const extra = (AUDITIEF_EXTRA_MET[KLANK] || [])
+    .filter(w => !basisWoorden.has(w.woord))
+    .map(w => ({
+      woord: w.woord,
+      emoji: w.emoji,
+      heeftLetter: true,
+      delen: splitGrafemen(w.woord)
+    }));
+  return shuffle([...basis, ...extra]);
+}
+
+// ============================================================
+// HEADER
+// ============================================================
+function initHeader() {
+  const badge = document.getElementById('header-badge');
+  const color = getComputedStyle(document.documentElement).getPropertyValue(`--kleur-${KERN}`).trim();
+  badge.textContent = KLANK;
+  badge.style.background = color || '#888';
+  document.getElementById('header-letter').textContent = `Letter ${KLANK.toUpperCase()}`;
+  document.getElementById('header-kern').textContent = KERN_NAMEN[KERN];
+  document.title = `Letter ${KLANK.toUpperCase()} – Letterapp`;
+}
+
+// ============================================================
+// FASE-NAVIGATIE
+// ============================================================
+const FASES = {
+  motivatie: {
+    label: '🎬 Motivatie',
+    activiteiten: [{ label: '🎥 Filmpje' }],
+    render: renderMotivatie,
+  },
+  visueel: {
+    label: '👁️ Visueel',
+    activiteiten: [
+      { label: '🔠 Letter tonen' },
+      { label: '🔍 Zoek de letter' },
+      { label: '🖼️ Klankbeeld' },
+    ],
+    render: renderVisueel,
+  },
+  auditief: {
+    label: '🔊 Auditief',
+    activiteiten: [
+      { label: '👂 Hoor je de letter?' },
+      { label: '🖼️ Woord + prent' },
+      { label: '✂️ Hakken (begin/midden/einde)' },
+    ],
+    render: renderAuditief,
+  },
+  koppeling: {
+    label: '🔗 Koppeling',
+    activiteiten: [
+      { label: '✂️ Hak in stukken' },
+      { label: '🔗 Plakken' },
+      { label: '🔤 Woorden maken' },
+    ],
+    render: renderKoppeling,
+  },
+  schrijf: {
+    label: '✏️ Schrijfmotoriek',
+    activiteiten: [{ label: '✏️ Schrijven' }],
+    render: renderSchrijf,
+  },
+};
+
+document.querySelectorAll('.fase-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    huidige_fase = tab.dataset.fase;
+    huidige_activ = 0;
+    updateFaseTabs();
+    renderActivTabs();
+    renderFase();
+  });
+});
+
+function updateFaseTabs() {
+  document.querySelectorAll('.fase-tab').forEach(t => {
+    const aktief = t.dataset.fase === huidige_fase;
+    t.classList.toggle('actief', aktief);
+  });
+  // kleur fase-tabs header
+  const kleur = FASE_KLEUREN[huidige_fase];
+  document.querySelectorAll('.fase-tab.actief').forEach(t => {
+    t.style.background = kleur;
+    t.style.color = '#fff';
+  });
+  document.querySelectorAll('.fase-tab:not(.actief)').forEach(t => {
+    t.style.background = '';
+    t.style.color = '';
+  });
+}
+
+function renderActivTabs() {
+  const container = document.getElementById('activ-tabs-container');
+  const fase = FASES[huidige_fase];
+  if (!fase || fase.activiteiten.length <= 1) {
+    container.innerHTML = '';
+    return;
+  }
+  container.innerHTML = '';
+  const div = document.createElement('div');
+  div.className = 'activ-tabs';
+  fase.activiteiten.forEach((act, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'activ-tab' + (i === huidige_activ ? ' actief' : '');
+    btn.textContent = act.label;
+    if (i === huidige_activ) btn.style.color = FASE_KLEUREN[huidige_fase];
+    btn.addEventListener('click', () => {
+      huidige_activ = i;
+      renderActivTabs();
+      renderFase();
+    });
+    div.appendChild(btn);
+  });
+  container.appendChild(div);
+}
+
+function renderFase() {
+  const inhoud = document.getElementById('fase-inhoud');
+  inhoud.innerHTML = '';
+  FASES[huidige_fase].render(inhoud, huidige_activ);
+}
+
+// ============================================================
+// FASE 1: MOTIVATIE
+// ============================================================
+function renderMotivatie(el) {
+  const videoId = VIDEO_IDS[KLANK];
+  const url = `https://www.youtube.com/watch?v=${videoId}`;
+  el.innerHTML = `
+    <div class="motivatie-kaart">
+      <div class="grote-letter" style="color:${FASE_KLEUREN.motivatie}">${KLANK}</div>
+      <div>
+        <h2>Letter ${KLANK.toUpperCase()}</h2>
+        <p style="color:#6B7280;margin-top:.3rem">Klik op de knop om het filmpje te tonen.</p>
+      </div>
+      <a class="video-link" href="${url}" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"/></svg>
+        Bekijk het filmpje – Letter ${KLANK.toUpperCase()}
+      </a>
+      <div style="font-size:.85rem;color:#9CA3AF;text-align:center">
+        Bron: Veilig Leren Lezen – Uitgeverij Zwijsen
+      </div>
+    </div>`;
+}
+
+// ============================================================
+// FASE 2: VISUEEL
+// ============================================================
+function renderVisueel(el, activ) {
+  if (activ === 0) renderLetterTonen(el);
+  else if (activ === 1) renderZoekDeLetter(el);
+  else renderKlankbeeldPlaceholder(el);
+}
+
+const SCHRIJF_MET_AFBEELDING = new Set([
+  'i','k','m','s','p','aa','r','e','v','n','t','ee','b','oo','d','oe','z',
+  'h','w','o','a','u','j','ie','l','ou','uu','g','au','f'
+]);
+
+function renderLetterTonen(el) {
+  const upper = KLANK.toUpperCase();
+  const heeftPng = SCHRIJF_MET_AFBEELDING.has(KLANK);
+  const schrijfInhoud = heeftPng
+    ? `<img src="schrijfletters/${KLANK}.png" alt="schrijfletter ${KLANK}" class="schrijfletter-img">`
+    : `<div class="letter-groot" style="color:${FASE_KLEUREN.visueel};font-family:'Edu SA Beginner',cursive">${upper}</div>
+       <div class="letter-klein" style="font-family:'Edu SA Beginner',cursive">${KLANK}</div>`;
+
+  el.innerHTML = `
+    <h2 style="margin-bottom:.8rem">Letter tonen</h2>
+    <div class="letter-varianten">
+      <div class="letter-variant-kaart druk-variant">
+        <div class="variant-naam">Drukschrift</div>
+        <div class="letter-groot" style="color:${FASE_KLEUREN.visueel}">${upper}</div>
+        <div class="letter-klein">${KLANK}</div>
+      </div>
+      <div class="letter-variant-kaart lees-variant">
+        <div class="variant-naam">Leesschrift</div>
+        <div class="letter-groot" style="color:${FASE_KLEUREN.visueel}">${upper}</div>
+        <div class="letter-klein">${KLANK}</div>
+      </div>
+      <div class="letter-variant-kaart schrijf-variant">
+        <div class="variant-naam">Schrijfschrift</div>
+        ${schrijfInhoud}
+      </div>
+    </div>
+    <div class="woord-kaart mt-3">
+      <p style="color:#6B7280;font-weight:700">Woorden met de letter <strong style="color:${FASE_KLEUREN.visueel}">${KLANK}</strong></p>
+      <div style="display:flex;flex-wrap:wrap;gap:.6rem;justify-content:center;margin-top:.5rem">
+        ${getAllWords().filter(w=>w.heeftLetter).map(w=>`
+          <div style="display:inline-flex;flex-direction:column;align-items:center;gap:.3rem;background:var(--licht);border-radius:1rem;padding:.6rem .9rem">
+            <span style="font-size:2.5rem">${w.emoji}</span>
+            <span style="font-weight:800;font-size:1rem">${w.woord}</span>
+          </div>`).join('')}
+      </div>
+    </div>`;
+}
+
+function renderZoekDeLetter(el) {
+  const RIJEN = 5, KOLOMMEN = 6;
+  const aantalCellen = RIJEN * KOLOMMEN;
+  const doelLetters = [KLANK, KLANK.toUpperCase()];
+
+  const bekend = getGekendLetters(KLANK).filter(l => l !== KLANK);
+  const fallback = ['a','b','c','d','e','f','g','h','j','l','m','n','o','p','r','s','t','u','v','w','x','y','z'];
+  const distractorBron = bekend.length >= 4 ? bekend : [...bekend, ...fallback.filter(l => !bekend.includes(l) && l !== KLANK)];
+  const distractors = [];
+  distractorBron.forEach(l => { distractors.push(l); if (l.length === 1) distractors.push(l.toUpperCase()); });
+
+  const grid = [];
+  const aantalDoel = 6 + Math.floor(Math.random() * 4);
+  for (let i = 0; i < aantalDoel; i++) {
+    grid.push(doelLetters[Math.floor(Math.random() * doelLetters.length)]);
+  }
+  while (grid.length < aantalCellen) {
+    if (distractors.length > 0) {
+      grid.push(distractors[Math.floor(Math.random() * distractors.length)]);
+    } else {
+      grid.push('?');
+    }
+  }
+  for (let i = grid.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [grid[i], grid[j]] = [grid[j], grid[i]];
+  }
+
+  const doelCount = grid.filter(l => doelLetters.includes(l)).length;
+  let gevonden = 0;
+
+  el.innerHTML = `
+    <div class="zoek-info">
+      <h2>Zoek de letter <span style="color:${FASE_KLEUREN.visueel}">${KLANK}</span></h2>
+      <span class="zoek-teller">✅ <span id="gevonden-teller">0</span> / ${doelCount}</span>
+    </div>
+    <div class="zoek-fontopties">
+      <label><input type="checkbox" id="font-druk" checked> Drukschrift</label>
+      <label><input type="checkbox" id="font-lees"> Leesschrift</label>
+      <label><input type="checkbox" id="font-schrijf"> Schrijfschrift</label>
+    </div>
+    <p style="color:#6B7280;font-size:.85rem;margin-bottom:.6rem">Tik op alle letters <strong>${KLANK}</strong> en <strong>${KLANK.toUpperCase()}</strong></p>
+    <div class="letter-grid" id="zoek-grid"></div>
+    <div class="flex-center mt-2">
+      <button class="btn btn-grijs" id="zoek-opnieuw">🔄 Opnieuw</button>
+    </div>`;
+
+  function getActiveFonts() {
+    const fonts = [];
+    if (el.querySelector('#font-druk').checked) fonts.push('font-druk');
+    if (el.querySelector('#font-lees').checked) fonts.push('font-lees');
+    if (el.querySelector('#font-schrijf').checked) fonts.push('font-schrijf');
+    return fonts.length ? fonts : ['font-druk'];
+  }
+
+  function randomFont(fonts) {
+    return fonts[Math.floor(Math.random() * fonts.length)];
+  }
+
+  function setCelInhoud(tegel, letter, font) {
+    const lc = letter.toLowerCase();
+    if (font === 'font-schrijf' && SCHRIJF_MET_AFBEELDING.has(lc)) {
+      tegel.innerHTML = `<img src="schrijfletters/${lc}.png" alt="${letter}" style="width:85%;height:85%;object-fit:contain;display:block;margin:auto;pointer-events:none">`;
+    } else {
+      tegel.textContent = letter;
+    }
+  }
+
+  const gridEl = el.querySelector('#zoek-grid');
+  const tegelFonts = [];
+
+  grid.forEach((letter, idx) => {
+    const tegel = document.createElement('div');
+    tegelFonts[idx] = randomFont(getActiveFonts());
+    tegel.className = `letter-tegel ${tegelFonts[idx]}`;
+    setCelInhoud(tegel, letter, tegelFonts[idx]);
+    tegel.dataset.letter = letter;
+    tegel.dataset.juist = doelLetters.includes(letter) ? '1' : '0';
+    tegel.addEventListener('click', () => {
+      if (tegel.classList.contains('gevonden') || tegel.classList.contains('fout')) return;
+      if (tegel.dataset.juist === '1') {
+        tegel.classList.add('gevonden');
+        gevonden++;
+        document.getElementById('gevonden-teller').textContent = gevonden;
+      } else {
+        tegel.classList.add('fout');
+        setTimeout(() => {
+          tegel.className = `letter-tegel ${tegelFonts[idx]}`;
+          setCelInhoud(tegel, letter, tegelFonts[idx]);
+        }, 800);
+      }
+    });
+    gridEl.appendChild(tegel);
+  });
+
+  ['#font-druk', '#font-lees', '#font-schrijf'].forEach(id => {
+    el.querySelector(id).addEventListener('change', () => {
+      const fonts = getActiveFonts();
+      gridEl.querySelectorAll('.letter-tegel').forEach((tegel, idx) => {
+        if (!tegel.classList.contains('gevonden')) {
+          tegelFonts[idx] = randomFont(fonts);
+          const isFout = tegel.classList.contains('fout');
+          tegel.className = `letter-tegel ${tegelFonts[idx]}${isFout ? ' fout' : ''}`;
+          setCelInhoud(tegel, grid[idx], tegelFonts[idx]);
+        }
+      });
+    });
+  });
+
+  el.querySelector('#zoek-opnieuw').addEventListener('click', () => renderZoekDeLetter(el));
+}
+
+function renderKlankbeeldPlaceholder(el) {
+  el.innerHTML = `
+    <div class="placeholder-kaart">
+      <div class="placeholder-icon">🖼️</div>
+      <h2>Klankbeeld</h2>
+      <p>Het klankbeeld voor letter <strong>${KLANK}</strong> wordt later toegevoegd.</p>
+      <p style="font-size:.8rem;margin-top:.5rem">Hier verschijnt het bijpassende klankbeeldkaartje.</p>
+    </div>`;
+}
+
+// ============================================================
+// FASE 3: AUDITIEF
+// ============================================================
+let auditief_idx = 0;
+
+function renderAuditief(el, activ) {
+  auditief_idx = 0;
+  if (activ === 0) renderHoorJeDeLetter(el);
+  else if (activ === 1) renderWoordEnPrent(el);
+  else renderHakenDrieStukken(el);
+}
+
+function spreekUit(tekst) {
+  if (!('speechSynthesis' in window)) return;
+  window.speechSynthesis.cancel();
+  const utt = new SpeechSynthesisUtterance(tekst);
+  utt.lang = 'nl-NL';
+  utt.rate = ttsRate;
+
+  function kiesStem() {
+    const stemmen = window.speechSynthesis.getVoices();
+    if (ttsVoiceNaam) {
+      const gekozen = stemmen.find(s => s.name === ttsVoiceNaam);
+      if (gekozen) { utt.voice = gekozen; return; }
+    }
+    const nlStemmen = stemmen.filter(s => s.lang === 'nl-NL' || s.lang === 'nl-BE' || s.lang.startsWith('nl'));
+    const voorkeur = ['Xander', 'Lotte', 'Ellen', 'Lisa', 'Jolanda', 'Fiona'];
+    const vrouwelijk = nlStemmen.find(s =>
+      voorkeur.some(n => s.name.toLowerCase().includes(n.toLowerCase())) &&
+      !s.name.toLowerCase().includes('male')
+    );
+    if (vrouwelijk) { utt.voice = vrouwelijk; return; }
+    const anyVrouw = nlStemmen.find(s =>
+      s.name.toLowerCase().includes('female') ||
+      ['lotte','ellen','lisa','fiona','jolanda','siri'].some(n => s.name.toLowerCase().includes(n))
+    );
+    if (anyVrouw) { utt.voice = anyVrouw; return; }
+    if (nlStemmen.length) utt.voice = nlStemmen[0];
+  }
+
+  if (window.speechSynthesis.getVoices().length) {
+    kiesStem();
+    window.speechSynthesis.speak(utt);
+  } else {
+    window.speechSynthesis.onvoiceschanged = () => { kiesStem(); window.speechSynthesis.speak(utt); };
+  }
+}
+
+function renderHoorJeDeLetter(el) {
+  const alleWoorden = getAllWordsAuditief();
+  let idx = 0;
+  let feedback = null;
+
+  function toon() {
+    const w = alleWoorden[idx % alleWoorden.length];
+    el.innerHTML = `
+      <h2 style="margin-bottom:1rem">Hoor je de letter <span style="color:${FASE_KLEUREN.auditief}">${KLANK}</span>?</h2>
+      <div class="woord-kaart">
+        <div class="woord-emoji">${w.emoji}</div>
+        ${feedback !== null ? `<div class="woord-tekst">${w.woord}</div>` : ''}
+        <button class="btn btn-grijs mt-1" id="spreek-btn">🔊 Hoor</button>
+        ${feedback !== null ? `<div class="feedback-banner ${feedback.juist ? 'juist' : 'fout'}">${feedback.tekst}</div>` : ''}
+        <div class="ja-nee-knoppen">
+          <button class="btn btn-groen btn-groot" id="btn-ja">👍 JA</button>
+          <button class="btn btn-rood btn-groot" id="btn-nee">👎 NEE</button>
+        </div>
+      </div>
+      <div class="woord-navigatie mt-2">
+        <button class="btn btn-grijs" id="vorig">← Vorig</button>
+        <span class="woord-teller">${(idx % alleWoorden.length) + 1} / ${alleWoorden.length}</span>
+        <button class="btn btn-grijs" id="volgend">Volgend →</button>
+      </div>`;
+
+    el.querySelector('#spreek-btn').addEventListener('click', () => spreekUit(w.woord));
+    el.querySelector('#btn-ja').addEventListener('click', () => {
+      feedback = w.heeftLetter
+        ? { juist: true,  tekst: '✅ Juist! "' + w.woord + '" heeft de letter ' + KLANK }
+        : { juist: false, tekst: '❌ Fout! "' + w.woord + '" heeft de letter ' + KLANK + ' NIET' };
+      toon();
+    });
+    el.querySelector('#btn-nee').addEventListener('click', () => {
+      feedback = !w.heeftLetter
+        ? { juist: true,  tekst: '✅ Juist! "' + w.woord + '" heeft de letter ' + KLANK + ' niet' }
+        : { juist: false, tekst: '❌ Fout! "' + w.woord + '" heeft de letter ' + KLANK + ' WEL' };
+      toon();
+    });
+    el.querySelector('#vorig').addEventListener('click', () => {
+      idx = (idx - 1 + alleWoorden.length) % alleWoorden.length;
+      feedback = null; toon();
+    });
+    el.querySelector('#volgend').addEventListener('click', () => {
+      idx = (idx + 1) % alleWoorden.length;
+      feedback = null; toon();
+    });
+
+    spreekUit(w.woord);
+  }
+  toon();
+}
+
+function renderWoordEnPrent(el) {
+  const woorden = getAllWordsMetLetter();
+  let idx = 0;
+
+  function toon() {
+    const w = woorden[idx];
+    el.innerHTML = `
+      <h2 style="margin-bottom:1rem">Woord en prent</h2>
+      <div class="woord-kaart">
+        <div class="woord-emoji">${w.emoji}</div>
+        <div class="woord-tekst">${highlightLetter(w.woord)}</div>
+        <button class="btn btn-grijs mt-1" id="spreek-btn">🔊 Hoor het woord</button>
+      </div>
+      <div class="woord-navigatie mt-2">
+        <button class="btn btn-grijs" id="vorig">← Vorig</button>
+        <span class="woord-teller">${idx + 1} / ${woorden.length}</span>
+        <button class="btn btn-grijs" id="volgend">Volgend →</button>
+      </div>
+      ${renderWoordToevoegen()}`;
+
+    el.querySelector('#spreek-btn').addEventListener('click', () => spreekUit(w.woord));
+    el.querySelector('#vorig').addEventListener('click', () => { idx = (idx-1+woorden.length)%woorden.length; toon(); });
+    el.querySelector('#volgend').addEventListener('click', () => { idx = (idx+1)%woorden.length; toon(); });
+    bindWoordToevoegen(el, () => { Object.assign(woorden, getAllWords().filter(w=>w.heeftLetter)); toon(); });
+  }
+  toon();
+}
+
+function renderHakenDrieStukken(el) {
+  const woorden = getAllWordsMetLetter();
+  let idx = 0;
+  let getoond = false;
+
+  function toon() {
+    const w = woorden[idx];
+    const hakken = renderHakkenKleuren(w.delen);
+    el.innerHTML = `
+      <h2 style="margin-bottom:1rem">Hakken in stukken <small style="color:#6B7280;font-size:.7em">(begin / midden / einde)</small></h2>
+      <div class="woord-kaart">
+        <div class="woord-emoji">${w.emoji}</div>
+        <div class="woord-tekst">${w.woord}</div>
+        <button class="btn btn-grijs" id="toon-btn">${getoond ? '🙈 Verberg stukken' : '👁️ Toon stukken'}</button>
+        ${getoond ? `<div class="hakken-container">${hakken}</div>` : ''}
+        <button class="btn btn-grijs mt-1" id="spreek-btn">🔊 Spreek uit</button>
+      </div>
+      <div class="woord-navigatie mt-2">
+        <button class="btn btn-grijs" id="vorig">← Vorig</button>
+        <span class="woord-teller">${idx+1} / ${woorden.length}</span>
+        <button class="btn btn-grijs" id="volgend">Volgend →</button>
+      </div>`;
+
+    el.querySelector('#toon-btn').addEventListener('click', () => { getoond = !getoond; toon(); });
+    el.querySelector('#spreek-btn').addEventListener('click', () => spreekUit(w.woord));
+    el.querySelector('#vorig').addEventListener('click', () => { idx=(idx-1+woorden.length)%woorden.length; getoond=false; toon(); });
+    el.querySelector('#volgend').addEventListener('click', () => { idx=(idx+1)%woorden.length; getoond=false; toon(); });
+  }
+  toon();
+}
+
+// Kleurcodering voor hakken: eerste=groen, laatste=rood, midden=geel
+function renderHakkenKleuren(delen) {
+  return delen.map((d, i) => {
+    let klasse;
+    if (i === 0) klasse = 'deel-groen';
+    else if (i === delen.length - 1) klasse = 'deel-rood';
+    else klasse = 'deel-geel';
+    return `<span class="${klasse}">${d}</span>` + (i < delen.length - 1 ? '<span class="streep">–</span>' : '');
+  }).join('');
+}
+
+function renderHakkenTegels(delen) {
+  return delen.map((d, i) => {
+    let klasse;
+    if (i === 0) klasse = 'groen';
+    else if (i === delen.length - 1) klasse = 'rood';
+    else klasse = 'geel';
+    return `<span class="deel-tegel ${klasse}">${d}</span>`;
+  }).join('<span style="font-size:2rem;color:#D1D5DB;margin:0 .2rem">–</span>');
+}
+
+// Markeert de doelletter in het woord
+function highlightLetter(woord) {
+  const re = new RegExp(`(${KLANK})`, 'gi');
+  return woord.replace(re, `<strong style="color:${FASE_KLEUREN.visueel};text-decoration:underline">$1</strong>`);
+}
+
+// ============================================================
+// FASE 4: KOPPELING KLANK-TEKEN
+// ============================================================
+function renderKoppeling(el, activ) {
+  if (activ === 0) renderHakInStukken(el);
+  else if (activ === 1) renderPlakken(el);
+  else renderWoordenMaken(el);
+}
+
+function renderHakInStukken(el) {
+  const woorden = shuffle(getAllWords().filter(w => w.heeftLetter));
+  let idx = 0;
+  let getoond = false;
+
+  function toon() {
+    const w = woorden[idx];
+    el.innerHTML = `
+      <h2 style="margin-bottom:1rem">Hak in stukken</h2>
+      <div class="woord-kaart">
+        <div class="woord-emoji">${w.emoji}</div>
+        <div class="woord-tekst">${w.woord}</div>
+        <button class="btn btn-grijs" id="toon-btn">${getoond ? '🙈 Verberg' : '👁️ Toon stukken'}</button>
+        ${getoond ? `<div class="hakken-container mt-1">${renderHakkenTegels(w.delen)}</div>` : ''}
+        <button class="btn btn-grijs mt-1" id="spreek-btn">🔊 Spreek uit</button>
+      </div>
+      <div class="woord-navigatie mt-2">
+        <button class="btn btn-grijs" id="vorig">← Vorig</button>
+        <span class="woord-teller">${idx+1} / ${woorden.length}</span>
+        <button class="btn btn-grijs" id="volgend">Volgend →</button>
+      </div>
+      ${renderWoordToevoegen()}`;
+
+    el.querySelector('#toon-btn').addEventListener('click', () => { getoond = !getoond; toon(); });
+    el.querySelector('#spreek-btn').addEventListener('click', () => spreekUit(w.woord));
+    el.querySelector('#vorig').addEventListener('click', () => { idx=(idx-1+woorden.length)%woorden.length; getoond=false; toon(); });
+    el.querySelector('#volgend').addEventListener('click', () => { idx=(idx+1)%woorden.length; getoond=false; toon(); });
+    bindWoordToevoegen(el, () => { Object.assign(woorden, getAllWords().filter(w=>w.heeftLetter)); toon(); });
+  }
+  toon();
+}
+
+function renderPlakken(el) {
+  const woorden = shuffle(getAllWords().filter(w => w.heeftLetter));
+  let idx = 0;
+
+  function toon() {
+    const w = woorden[idx];
+
+    function kleurVoorPositie(pos, totaal) {
+      if (pos === 0) return 'groen';
+      if (pos === totaal - 1) return 'rood';
+      return 'geel';
+    }
+
+    const syllabeHtml = w.delen.map((deel, i) =>
+      `<span class="deel-tegel ${kleurVoorPositie(i, w.delen.length)}">${deel}</span>`
+      + (i < w.delen.length - 1 ? '<span style="font-size:1.5rem;color:#D1D5DB;margin:0 .2rem">–</span>' : '')
+    ).join('');
+
+    el.innerHTML = `
+      <h2 style="margin-bottom:1rem">Plakken</h2>
+      <p style="color:#6B7280;font-size:.9rem;margin-bottom:.6rem">Spreek de stukjes één voor één uit en plak ze samen tot het woord.</p>
+      <div class="woord-kaart">
+        <div style="display:flex;gap:.3rem;justify-content:center;align-items:center;flex-wrap:wrap;margin:.5rem 0 1rem">
+          ${syllabeHtml}
+        </div>
+        <div id="plak-resultaat"></div>
+        <div style="display:flex;gap:.6rem;flex-wrap:wrap;justify-content:center;margin-top:.8rem">
+          <button class="btn btn-primary" id="controleer-btn">🔍 Controleer</button>
+        </div>
+      </div>
+      <div class="woord-navigatie mt-2">
+        <button class="btn btn-grijs" id="vorig">← Vorig</button>
+        <span class="woord-teller">${idx+1} / ${woorden.length}</span>
+        <button class="btn btn-grijs" id="volgend">Volgend →</button>
+      </div>`;
+
+    el.querySelector('#controleer-btn').addEventListener('click', () => {
+      el.querySelector('#plak-resultaat').innerHTML = `
+        <div class="woord-emoji">${w.emoji}</div>
+        <div class="woord-tekst">${w.woord}</div>`;
+      spreekUit(w.woord);
+      el.querySelector('#controleer-btn').style.opacity = '0.5';
+      el.querySelector('#controleer-btn').disabled = true;
+    });
+    el.querySelector('#vorig').addEventListener('click', () => { idx=(idx-1+woorden.length)%woorden.length; toon(); });
+    el.querySelector('#volgend').addEventListener('click', () => { idx=(idx+1)%woorden.length; toon(); });
+  }
+  toon();
+}
+
+function renderWoordenMaken(el) {
+  const gekend = getGekendLetters(KLANK);
+  const tiles = [...gekend];
+  let gebouwd = [];
+
+  function toon() {
+    el.innerHTML = `
+      <h2 style="margin-bottom:.8rem">Woorden maken</h2>
+      <p style="color:#6B7280;font-size:.9rem;margin-bottom:.8rem">Tik letters om een woord te bouwen. Tik op een letter in het woord om hem te verwijderen.</p>
+      <div class="woord-bouw" id="woord-bouw">
+        ${gebouwd.length ? gebouwd.map((l,i)=>`<span class="woord-bouw-tegel" data-idx="${i}">${l}</span>`).join('') : '<span style="color:#D1D5DB;font-style:italic;font-size:1rem">Tik letters hieronder...</span>'}
+      </div>
+      <div style="display:flex;gap:.6rem;justify-content:center;flex-wrap:wrap;margin:.8rem 0">
+        <button class="btn btn-grijs" id="spreek-gebouw">🔊 Spreek uit</button>
+        <button class="btn btn-wis" id="wis-alles">🔄 Wis alles</button>
+        <button class="btn btn-grijs" id="geluid-toggle">${geluidAan ? '🔊 Geluid aan' : '🔇 Geluid uit'}</button>
+      </div>
+      <div class="letter-tiles mt-1" id="letter-tiles">
+        ${tiles.map(l => `<button class="letter-tile${l===KLANK?' nieuw':''}" style="${l===KLANK?'color:'+FASE_KLEUREN.koppeling:''}" data-letter="${l}">${l}</button>`).join('')}
+      </div>`;
+
+    el.querySelectorAll('.letter-tile').forEach(tile => {
+      tile.addEventListener('click', () => {
+        gebouwd.push(tile.dataset.letter);
+        toon();
+        if (geluidAan) spreekUit(gebouwd.join(''));
+      });
+    });
+    el.querySelectorAll('.woord-bouw-tegel').forEach(tegel => {
+      tegel.addEventListener('click', () => {
+        gebouwd.splice(parseInt(tegel.dataset.idx), 1);
+        toon();
+      });
+    });
+    el.querySelector('#spreek-gebouw').addEventListener('click', () => {
+      if (gebouwd.length) spreekUit(gebouwd.join(''));
+    });
+    el.querySelector('#wis-alles').addEventListener('click', () => { gebouwd = []; toon(); });
+    el.querySelector('#geluid-toggle').addEventListener('click', () => { geluidAan = !geluidAan; toon(); });
+  }
+  toon();
+}
+
+// ============================================================
+// FASE 5: SCHRIJFMOTORIEK
+// ============================================================
+function renderSchrijf(el) {
+  const heeftPng = SCHRIJF_MET_AFBEELDING.has(KLANK);
+  const schrijfRef = heeftPng
+    ? `<div class="schrijfletter-ref-wrapper"><img src="schrijfletters/${KLANK}.png" alt="schrijfletter ${KLANK}" class="schrijfletter-ref-img"></div>`
+    : '';
+
+  el.innerHTML = `
+    <div class="schrijf-wrapper">
+      <div class="schrijf-info">
+        Schrijf de letter <strong style="color:${FASE_KLEUREN.schrijf}">${KLANK}</strong> tussen de lijnen
+      </div>
+      <div class="schrijf-rij">
+        ${schrijfRef}
+        <div class="canvas-container">
+          <canvas id="schrijf-canvas" width="700" height="380"></canvas>
+        </div>
+      </div>
+      <div class="schrijf-knoppen">
+        <button class="btn btn-wis" id="wis-canvas">🧹 Wis alles</button>
+        <label class="schrijf-overlay-toggle">
+          <input type="checkbox" id="toon-letter-overlay"> 👁️ Toon achtergrond om na te tekenen
+        </label>
+      </div>
+    </div>`;
+
+  let schrijfImgObj = null;
+  if (heeftPng) {
+    schrijfImgObj = new Image();
+    schrijfImgObj.src = `schrijfletters/${KLANK}.png`;
+  }
+
+  initCanvas(schrijfImgObj);
+}
+
+function initCanvas(schrijfImg) {
+  const canvas = document.getElementById('schrijf-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  let teken = false;
+  let letterOverlay = false;
+
+  function tekenAchtergrond() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = '#FFFBF0';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Schrijflijnen (2 sets van dubbele lijnen)
+    const lijnKleur = '#D1C4A8';
+    const middellijn = '#F0E8D0';
+    const sets = [
+      { top: 60, midden: 110, basis: 160 },
+      { top: 210, midden: 260, basis: 310 },
+    ];
+
+    sets.forEach(s => {
+      ctx.beginPath(); ctx.moveTo(20, s.top); ctx.lineTo(canvas.width-20, s.top);
+      ctx.strokeStyle = lijnKleur; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.beginPath(); ctx.setLineDash([8,6]);
+      ctx.moveTo(20, s.midden); ctx.lineTo(canvas.width-20, s.midden);
+      ctx.strokeStyle = middellijn; ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath(); ctx.moveTo(20, s.basis); ctx.lineTo(canvas.width-20, s.basis);
+      ctx.strokeStyle = lijnKleur; ctx.lineWidth = 2; ctx.stroke();
+    });
+
+    // Schrijfletter als overteken-achtergrond
+    if (letterOverlay) {
+      if (schrijfImg && schrijfImg.complete && schrijfImg.naturalWidth > 0) {
+        const maxH = 300;
+        const maxW = canvas.width - 60;
+        const scale = Math.min(maxH / schrijfImg.height, maxW / schrijfImg.width);
+        const w = schrijfImg.width * scale;
+        const h = schrijfImg.height * scale;
+        ctx.globalAlpha = 0.22;
+        ctx.drawImage(schrijfImg, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
+        ctx.globalAlpha = 1;
+      } else {
+        ctx.font = `bold 200px 'Edu SA Beginner', cursive`;
+        ctx.fillStyle = 'rgba(200,200,200,0.3)';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'alphabetic';
+        ctx.fillText(KLANK, canvas.width / 2, 160);
+      }
+    }
+  }
+
+  tekenAchtergrond();
+
+  let paths = [];
+  let huidigPad = null;
+
+  // Herlaad canvas zodra afbeelding klaar is
+  if (schrijfImg) schrijfImg.onload = () => tekenOpnieuw();
+
+  function getPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const bron = e.touches ? e.touches[0] : e;
+    return { x: (bron.clientX - rect.left) * scaleX, y: (bron.clientY - rect.top) * scaleY };
+  }
+
+  function tekenOpnieuw() {
+    tekenAchtergrond();
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#1E40AF';
+    paths.forEach(pad => {
+      if (pad.length < 2) return;
+      ctx.beginPath();
+      ctx.moveTo(pad[0].x, pad[0].y);
+      pad.slice(1).forEach(p => ctx.lineTo(p.x, p.y));
+      ctx.stroke();
+    });
+  }
+
+  function startTeken(e) {
+    e.preventDefault();
+    teken = true;
+    const pos = getPos(e);
+    huidigPad = [pos];
+    paths.push(huidigPad);
+  }
+  function bewegTeken(e) {
+    if (!teken) return;
+    e.preventDefault();
+    const pos = getPos(e);
+    huidigPad.push(pos);
+    tekenOpnieuw();
+  }
+  function stopTeken(e) { teken = false; huidigPad = null; }
+
+  canvas.addEventListener('mousedown', startTeken);
+  canvas.addEventListener('mousemove', bewegTeken);
+  canvas.addEventListener('mouseup', stopTeken);
+  canvas.addEventListener('touchstart', startTeken, { passive: false });
+  canvas.addEventListener('touchmove', bewegTeken, { passive: false });
+  canvas.addEventListener('touchend', stopTeken);
+
+  document.getElementById('wis-canvas').addEventListener('click', () => {
+    paths = []; tekenOpnieuw();
+  });
+  document.getElementById('toon-letter-overlay').addEventListener('change', (e) => {
+    letterOverlay = e.target.checked;
+    tekenOpnieuw();
+  });
+}
+
+// ============================================================
+// WOORD TOEVOEGEN (gedeeld)
+// ============================================================
+function renderWoordToevoegen() {
+  return `
+    <details style="margin-top:1rem;width:100%">
+      <summary style="cursor:pointer;font-weight:700;color:#6B7280;font-size:.85rem">➕ Eigen woord toevoegen</summary>
+      <div style="margin-top:.8rem;display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+        <input id="extra-woord" type="text" placeholder="woord" style="padding:.5rem .8rem;border:2px solid var(--rand);border-radius:.6rem;font-size:1rem;font-family:inherit;width:120px">
+        <input id="extra-emoji" type="text" placeholder="🖼️ emoji" style="padding:.5rem .8rem;border:2px solid var(--rand);border-radius:.6rem;font-size:1rem;font-family:inherit;width:80px">
+        <button class="btn btn-primary btn-groot" id="voeg-toe-btn" style="font-size:.9rem;padding:.5rem 1rem">Voeg toe</button>
+      </div>
+    </details>`;
+}
+
+function bindWoordToevoegen(el, onAdded) {
+  const btn = el.querySelector('#voeg-toe-btn');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    const woord = el.querySelector('#extra-woord').value.trim().toLowerCase();
+    const emoji = el.querySelector('#extra-emoji').value.trim() || '🔤';
+    if (!woord) return;
+    // Eenvoudige grafemen: splits op bekende digrams
+    const delen = splitGrafemen(woord);
+    const heeftLetter = woord.includes(KLANK);
+    const extra = getExtraWords();
+    extra.push({ woord, emoji, delen, heeftLetter });
+    saveExtraWords(extra);
+    el.querySelector('#extra-woord').value = '';
+    el.querySelector('#extra-emoji').value = '';
+    if (onAdded) onAdded();
+  });
+}
+
+// Eenvoudige grafeem-splitsing
+function splitGrafemen(woord) {
+  const digrams = ['au','ui','eu','ie','oe','ij','ei','ou','aa','ee','oo','uu','ng','ch','sc'];
+  const result = [];
+  let i = 0;
+  while (i < woord.length) {
+    let gevonden = false;
+    for (const dg of digrams) {
+      if (woord.slice(i, i + dg.length) === dg) {
+        result.push(dg);
+        i += dg.length;
+        gevonden = true;
+        break;
+      }
+    }
+    if (!gevonden) { result.push(woord[i]); i++; }
+  }
+  return result;
+}
+
+// ============================================================
+// START
+// ============================================================
+initHeader();
+initTTSPanel();
+updateFaseTabs();
+renderActivTabs();
+renderFase();
+</script>
+</body>
+</html>

@@ -1,0 +1,710 @@
+/* ===== Letterapp – Veilig Leren Lezen ===== */
+
+:root {
+  --kleur-start:  #F59E0B;
+  --kleur-kern1:  #3B82F6;
+  --kleur-kern2:  #10B981;
+  --kleur-kern3:  #8B5CF6;
+  --kleur-kern4:  #F97316;
+  --kleur-kern5:  #EC4899;
+  --kleur-kern6:  #14B8A6;
+
+  --fase-motivatie:  #7C3AED;
+  --fase-visueel:    #2563EB;
+  --fase-auditief:   #EA580C;
+  --fase-koppeling:  #16A34A;
+  --fase-schrijf:    #DB2777;
+
+  --groen:  #22C55E;
+  --geel:   #EAB308;
+  --rood:   #EF4444;
+
+  --bg:     #FFF8F0;
+  --wit:    #FFFFFF;
+  --tekst:  #1E1B18;
+  --licht:  #F3F4F6;
+  --rand:   #E5E7EB;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { font-size: 20px; }
+
+body {
+  font-family: 'Nunito', 'Segoe UI', sans-serif;
+  background: var(--bg);
+  color: var(--tekst);
+  min-height: 100vh;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* ===== Typografie ===== */
+h1 { font-size: 2.2rem; font-weight: 900; }
+h2 { font-size: 1.6rem; font-weight: 800; }
+h3 { font-size: 1.2rem; font-weight: 700; }
+p  { line-height: 1.5; }
+
+/* ===== Knoppen ===== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .4em;
+  padding: .6em 1.4em;
+  border: none;
+  border-radius: 1rem;
+  font-size: 1rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: transform .1s, filter .1s;
+  user-select: none;
+}
+.btn:active { transform: scale(.95); filter: brightness(.9); }
+.btn-primary { background: #1E1B18; color: #fff; }
+.btn-groot   { font-size: 1.4rem; padding: .8em 2em; border-radius: 1.4rem; }
+.btn-rond    { width: 3.2rem; height: 3.2rem; border-radius: 50%; padding: 0; font-size: 1.4rem; }
+.btn-groen   { background: var(--groen); color: #fff; }
+.btn-rood    { background: var(--rood);  color: #fff; }
+.btn-grijs   { background: var(--licht); color: var(--tekst); }
+.btn-wis     { background: #94A3B8; color: #fff; }
+
+/* ===== Header (les.html) ===== */
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: .6rem 1.2rem;
+  background: var(--wit);
+  border-bottom: 2px solid var(--rand);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.app-header .terug {
+  font-size: 1.6rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: .2rem .6rem;
+  border-radius: .6rem;
+}
+.app-header .terug:active { background: var(--licht); }
+.app-header .letter-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: .8rem;
+  font-size: 1.8rem;
+  font-weight: 900;
+  color: #fff;
+  flex-shrink: 0;
+}
+.app-header .letter-naam {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #6B7280;
+}
+
+/* ===== TTS instellingen ===== */
+.tts-settings-btn {
+  background: none;
+  border: 2px solid var(--rand);
+  border-radius: .6rem;
+  font-size: .85rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  padding: .3rem .7rem;
+  flex-shrink: 0;
+  color: #374151;
+}
+.tts-settings-btn:hover, .tts-settings-btn:active { background: var(--licht); }
+.tts-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .8rem;
+  align-items: center;
+  padding: .6rem 1.2rem;
+  background: var(--wit);
+  border-bottom: 2px solid var(--rand);
+}
+.tts-label {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  font-size: .85rem;
+  font-weight: 600;
+  color: #374151;
+}
+.tts-label select { font-family: inherit; font-size: .85rem; max-width: 14rem; }
+.tts-label input[type=range] { width: 7rem; }
+
+/* ===== Fase-tabs ===== */
+.fase-tabs {
+  display: flex;
+  overflow-x: auto;
+  scrollbar-width: none;
+  gap: .3rem;
+  padding: .5rem 1rem;
+  background: var(--wit);
+  border-bottom: 2px solid var(--rand);
+}
+.fase-tabs::-webkit-scrollbar { display: none; }
+.fase-tab {
+  flex-shrink: 0;
+  padding: .5rem 1.1rem;
+  border-radius: .8rem;
+  border: 2.5px solid transparent;
+  background: var(--licht);
+  font-weight: 700;
+  font-size: .85rem;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background .15s, color .15s;
+  white-space: nowrap;
+}
+.fase-tab.actief {
+  color: #fff;
+}
+.fase-tab[data-fase="motivatie"].actief  { background: var(--fase-motivatie); }
+.fase-tab[data-fase="visueel"].actief    { background: var(--fase-visueel);   }
+.fase-tab[data-fase="auditief"].actief   { background: var(--fase-auditief);  }
+.fase-tab[data-fase="koppeling"].actief  { background: var(--fase-koppeling); }
+.fase-tab[data-fase="schrijf"].actief    { background: var(--fase-schrijf);   }
+
+/* ===== Activiteit-tabs ===== */
+.activ-tabs {
+  display: flex;
+  gap: .5rem;
+  padding: .8rem 1rem .4rem;
+  flex-wrap: wrap;
+}
+.activ-tab {
+  padding: .4rem 1rem;
+  border-radius: .7rem;
+  border: 2px solid var(--rand);
+  background: var(--wit);
+  font-weight: 700;
+  font-size: .85rem;
+  cursor: pointer;
+  font-family: inherit;
+}
+.activ-tab.actief {
+  border-color: currentColor;
+}
+
+/* ===== Hoofd-content ===== */
+.inhoud {
+  padding: 1rem 1.2rem 2rem;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+/* ===== Fase: Motivatie ===== */
+.motivatie-kaart {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.6rem;
+  padding: 2rem;
+  background: var(--wit);
+  border-radius: 1.6rem;
+  box-shadow: 0 2px 12px rgba(0,0,0,.08);
+  text-align: center;
+}
+.motivatie-kaart .grote-letter {
+  font-size: 9rem;
+  font-weight: 900;
+  line-height: 1;
+}
+.motivatie-kaart .video-link {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .9rem 2rem;
+  background: #FF0000;
+  color: #fff;
+  border-radius: 1rem;
+  font-size: 1.1rem;
+  font-weight: 800;
+  text-decoration: none;
+  transition: filter .15s;
+}
+.motivatie-kaart .video-link:hover { filter: brightness(1.1); }
+.motivatie-kaart .video-link svg { width: 1.8rem; height: 1.8rem; }
+
+/* ===== Fase: Visueel – Letter tonen ===== */
+.letter-varianten {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.letter-variant-kaart {
+  background: var(--wit);
+  border-radius: 1.4rem;
+  padding: 1.4rem .8rem;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,.07);
+}
+.letter-variant-kaart .variant-naam {
+  font-size: .75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: #6B7280;
+  margin-bottom: .8rem;
+}
+.letter-variant-kaart .letter-groot {
+  font-size: 5.5rem;
+  font-weight: 900;
+  line-height: 1;
+}
+.letter-variant-kaart .letter-klein {
+  font-size: 4rem;
+  font-weight: 700;
+  line-height: 1;
+  color: #374151;
+}
+.druk-variant  .letter-groot { font-family: 'Arial Black', sans-serif; }
+.lees-variant  .letter-groot { font-family: 'Atkinson Hyperlegible', Arial, sans-serif; font-weight: 700; }
+.lees-variant  .letter-klein { font-family: 'Atkinson Hyperlegible', Arial, sans-serif; font-weight: 400; }
+.schrijf-variant .letter-groot { font-family: 'Edu SA Beginner', cursive; font-weight: 700; font-size: 6.5rem; }
+.schrijf-variant .letter-klein { font-family: 'Edu SA Beginner', cursive; font-weight: 700; font-size: 5rem; }
+.schrijfletter-img {
+  width: 100%;
+  max-height: 18rem;
+  object-fit: contain;
+  border-radius: .5rem;
+}
+
+/* ===== Fase: Visueel – Zoek de letter ===== */
+.letter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(4.5rem, 1fr));
+  gap: .5rem;
+  padding: 1rem;
+  background: var(--wit);
+  border-radius: 1.4rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,.07);
+}
+.letter-tegel {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.8rem;
+  font-weight: 800;
+  border-radius: .8rem;
+  background: var(--licht);
+  cursor: pointer;
+  transition: background .12s, transform .1s;
+  user-select: none;
+  border: 3px solid transparent;
+}
+.letter-tegel:active { transform: scale(.9); }
+.letter-tegel.gevonden {
+  background: var(--groen);
+  color: #fff;
+  border-color: #16A34A;
+}
+.letter-tegel.fout {
+  background: var(--rood);
+  color: #fff;
+  border-color: #B91C1C;
+}
+.zoek-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: .6rem .2rem;
+}
+.zoek-teller {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--groen);
+}
+
+/* ===== Woord-kaart (gedeeld) ===== */
+.woord-kaart {
+  background: var(--wit);
+  border-radius: 1.6rem;
+  padding: 1.6rem;
+  box-shadow: 0 2px 12px rgba(0,0,0,.08);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+.woord-emoji {
+  font-size: 8rem;
+  line-height: 1;
+}
+.woord-tekst {
+  font-size: 3.5rem;
+  font-weight: 900;
+  letter-spacing: .04em;
+}
+.woord-navigatie {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.woord-teller {
+  font-size: .85rem;
+  color: #6B7280;
+  font-weight: 600;
+  min-width: 4rem;
+  text-align: center;
+}
+
+/* ===== Auditief: Hoor je de letter? ===== */
+.ja-nee-knoppen {
+  display: flex;
+  gap: 1.4rem;
+  justify-content: center;
+  margin-top: .5rem;
+}
+.ja-nee-knoppen .btn {
+  width: 8rem;
+  height: 5rem;
+  font-size: 1.5rem;
+  border-radius: 1.2rem;
+}
+.feedback-banner {
+  margin-top: .8rem;
+  padding: .7rem 1.4rem;
+  border-radius: 1rem;
+  font-size: 1.2rem;
+  font-weight: 800;
+  text-align: center;
+}
+.feedback-banner.juist  { background: #DCFCE7; color: #15803D; }
+.feedback-banner.fout   { background: #FEE2E2; color: #B91C1C; }
+
+/* ===== Hakken-kleurcodering ===== */
+.hakken-container {
+  display: flex;
+  gap: .6rem;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 2.8rem;
+  font-weight: 900;
+  margin: .5rem 0;
+}
+.deel-groen { color: var(--groen); }
+.deel-geel  { color: var(--geel);  }
+.deel-rood  { color: var(--rood);  }
+.streep {
+  color: #D1D5DB;
+  font-size: 2rem;
+}
+
+/* hakken-tegels (voor schrijf + kleur) */
+.deel-tegel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 3.5rem;
+  padding: .3em .6em;
+  border-radius: .8rem;
+  font-size: 2.6rem;
+  font-weight: 900;
+  color: #fff;
+}
+.deel-tegel.groen { background: var(--groen); }
+.deel-tegel.geel  { background: var(--geel);  }
+.deel-tegel.rood  { background: var(--rood);  }
+
+/* ===== Plakken ===== */
+.plak-invoer {
+  font-size: 3rem;
+  font-weight: 900;
+  text-align: center;
+  letter-spacing: .05em;
+  padding: .5rem 1rem;
+  background: var(--wit);
+  border-radius: 1rem;
+  min-height: 4.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 3px dashed var(--rand);
+}
+.plak-invoer.klaar { border-style: solid; border-color: var(--groen); }
+
+.plak-stukken {
+  display: flex;
+  gap: .6rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.plak-stuk {
+  padding: .5em .9em;
+  border-radius: .8rem;
+  border: 3px solid var(--rand);
+  background: var(--wit);
+  font-size: 1.8rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background .12s, transform .1s;
+}
+.plak-stuk:active { transform: scale(.92); }
+.plak-stuk.gebruikt { opacity: .3; pointer-events: none; }
+
+/* ===== Woorden maken ===== */
+.letter-tiles {
+  display: flex;
+  gap: .5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.letter-tile {
+  width: 3.8rem;
+  height: 3.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: .8rem;
+  background: var(--wit);
+  border: 2.5px solid var(--rand);
+  font-size: 1.5rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background .1s, transform .1s;
+  user-select: none;
+}
+.letter-tile:active { transform: scale(.9); }
+.letter-tile.nieuw  { border-color: currentColor; }
+.woord-bouw {
+  display: flex;
+  gap: .4rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  min-height: 4rem;
+  padding: .5rem;
+  background: var(--wit);
+  border-radius: 1rem;
+  border: 3px dashed var(--rand);
+}
+.woord-bouw-tegel {
+  padding: .3em .6em;
+  background: var(--licht);
+  border-radius: .6rem;
+  font-size: 1.6rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.woord-bouw-tegel:active { background: var(--rood); color: #fff; }
+
+/* ===== Schrijfmotoriek ===== */
+.schrijf-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+.schrijf-info {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #374151;
+  text-align: center;
+}
+.canvas-container {
+  position: relative;
+  width: 100%;
+  max-width: 700px;
+  border-radius: 1.2rem;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0,0,0,.12);
+}
+#schrijf-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  touch-action: none;
+  background: #FFFBF0;
+  cursor: crosshair;
+}
+.schrijf-knoppen {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.schrijf-overlay-toggle {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  font-weight: 700;
+  font-size: .9rem;
+  color: #374151;
+  cursor: pointer;
+  padding: .4rem .8rem;
+  border: 2px solid var(--rand);
+  border-radius: .8rem;
+  background: var(--wit);
+}
+
+/* ===== Klankbeeld placeholder ===== */
+.placeholder-kaart {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 3rem;
+  background: var(--wit);
+  border-radius: 1.6rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,.07);
+  text-align: center;
+  color: #9CA3AF;
+}
+.placeholder-kaart .placeholder-icon { font-size: 4rem; }
+
+/* ===== Index-pagina ===== */
+.index-header {
+  padding: 1.4rem 1.4rem .6rem;
+  display: flex;
+  align-items: center;
+  gap: .8rem;
+}
+.index-header h1 { font-size: 1.6rem; }
+.index-header .emoji { font-size: 2rem; }
+
+.kern-sectie {
+  padding: .6rem 1rem 1.2rem;
+}
+.kern-label {
+  font-size: .75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: #6B7280;
+  padding: 0 .4rem;
+  margin-bottom: .5rem;
+}
+.letter-keuze-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(6rem, 1fr));
+  gap: .6rem;
+}
+.letter-knop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  border-radius: 1.2rem;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  transition: transform .1s, filter .1s;
+  text-decoration: none;
+  padding: .4rem;
+}
+.letter-knop:active { transform: scale(.93); filter: brightness(.9); }
+.letter-knop .klank {
+  font-size: 2rem;
+  font-weight: 900;
+  color: #fff;
+  line-height: 1;
+}
+.letter-knop .kern-naam {
+  font-size: .6rem;
+  font-weight: 700;
+  color: rgba(255,255,255,.8);
+  margin-top: .2rem;
+}
+
+/* kern kleuren */
+.kern-start  { background: var(--kleur-start);  }
+.kern-kern1  { background: var(--kleur-kern1);  }
+.kern-kern2  { background: var(--kleur-kern2);  }
+.kern-kern3  { background: var(--kleur-kern3);  }
+.kern-kern4  { background: var(--kleur-kern4);  }
+.kern-kern5  { background: var(--kleur-kern5);  }
+.kern-kern6  { background: var(--kleur-kern6);  }
+
+/* ===== Hulpklassen ===== */
+.verborgen  { display: none !important; }
+.mt-1 { margin-top: .5rem; }
+.mt-2 { margin-top: 1rem; }
+.mt-3 { margin-top: 1.6rem; }
+.flex-center { display: flex; align-items: center; justify-content: center; gap: .8rem; flex-wrap: wrap; }
+.tekst-midden { text-align: center; }
+
+/* ===== Zoek de letter: font opties ===== */
+.zoek-fontopties {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: .6rem;
+  font-weight: 600;
+  font-size: .9rem;
+  color: #374151;
+}
+.zoek-fontopties label {
+  display: flex;
+  align-items: center;
+  gap: .3rem;
+  cursor: pointer;
+}
+.font-druk { font-family: 'Nunito', sans-serif; }
+.font-lees { font-family: 'Atkinson Hyperlegible', Arial, sans-serif; }
+.font-schrijf { font-family: 'Edu SA Beginner', cursive; font-size: 1.3em; }
+
+/* ===== Plakken: samenstelzone ===== */
+.plak-assemblee {
+  min-height: 3.5rem;
+  padding: .8rem 1rem;
+  background: var(--licht);
+  border-radius: 1rem;
+  border: 2px dashed var(--rand);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .3rem;
+  flex-wrap: wrap;
+  width: 100%;
+  margin-top: .6rem;
+}
+
+/* ===== Schrijfmotoriek: rij layout met referentieafbeelding ===== */
+.schrijf-rij {
+  display: flex;
+  gap: 1.2rem;
+  align-items: flex-start;
+  width: 100%;
+  max-width: 900px;
+}
+.schrijfletter-ref-wrapper {
+  flex-shrink: 0;
+  width: 150px;
+  padding-top: .3rem;
+}
+.schrijfletter-ref-img {
+  width: 100%;
+  border-radius: .8rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,.1);
+}
+
+/* ===== Responsief: grotere TV-schermen ===== */
+@media (min-width: 900px) {
+  html { font-size: 22px; }
+  .letter-variant-kaart .letter-groot { font-size: 7rem; }
+  .woord-emoji { font-size: 10rem; }
+  .woord-tekst { font-size: 4.5rem; }
+  .hakken-container { font-size: 3.5rem; }
+  .deel-tegel { font-size: 3.2rem; }
+}

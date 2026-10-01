@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Letterapp – Veilig Leren Lezen</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="index-header">
+  <span class="emoji">🔤</span>
+  <div>
+    <h1>Letterapp</h1>
+    <p style="font-size:.8rem;color:#6B7280;font-weight:600">Veilig Leren Lezen – Kim versie</p>
+  </div>
+</div>
+
+<div id="kern-container"></div>
+
+<script src="data.js"></script>
+<script>
+const KERN_NAMEN = {
+  start: 'Kern Start',
+  kern1: 'Kern 1',
+  kern2: 'Kern 2',
+  kern3: 'Kern 3',
+  kern4: 'Kern 4',
+  kern5: 'Kern 5',
+  kern6: 'Kern 6',
+};
+
+function renderIndex() {
+  const container = document.getElementById('kern-container');
+
+  for (const [kernId, letters] of Object.entries(KERN_GROEPEN)) {
+    const sectie = document.createElement('div');
+    sectie.className = 'kern-sectie';
+
+    const label = document.createElement('div');
+    label.className = 'kern-label';
+    label.textContent = KERN_NAMEN[kernId];
+    sectie.appendChild(label);
+
+    const grid = document.createElement('div');
+    grid.className = 'letter-keuze-grid';
+
+    for (const klank of letters) {
+      const knop = document.createElement('a');
+      knop.className = `letter-knop kern-${kernId}`;
+      knop.href = `les.html?letter=${encodeURIComponent(klank)}`;
+      knop.innerHTML = `<span class="klank">${klank}</span><span class="kern-naam">${KERN_NAMEN[kernId]}</span>`;
+      grid.appendChild(knop);
+    }
+
+    sectie.appendChild(grid);
+    container.appendChild(sectie);
+  }
+}
+
+renderIndex();
+</script>
+</body>
+</html>
